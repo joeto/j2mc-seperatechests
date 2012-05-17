@@ -1,0 +1,10 @@
+name: SeperateChests
+version: 1.0
+main: to.joe.j2mc.seperatechests.J2MC_seperatechests
+commands:
+  seperatechests:
+    usage: /seperatechests
+    aliases: [sepchests]
+    permission: j2mc.seperatechest.command
+    permission-message: nope.avi
+    
