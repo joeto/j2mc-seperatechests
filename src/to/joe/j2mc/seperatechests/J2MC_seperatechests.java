@@ -116,39 +116,43 @@ public class J2MC_seperatechests extends JavaPlugin implements Listener {
                     ps.setDouble(3, loc.getY());
                     ps.setDouble(4, loc.getZ());
                     ResultSet rs = ps.executeQuery();
-                    rs.next();
-                    /*
-                    if(this.chestUsers.containsValue(rs.getInt("ChestID"))){
-                        ((Player) event.getPlayer()).sendMessage(ChatColor.RED + "This chest is currently in use! Please wait.");
+                    if (rs.next()) {
+                        /*
+                         * if(this.chestUsers.containsValue(rs.getInt("ChestID"))
+                         * ){ ((Player)
+                         * event.getPlayer()).sendMessage(ChatColor.RED +
+                         * "This chest is currently in use! Please wait.");
+                         * event.setCancelled(true); return; }
+                         */
+                        PreparedStatement ps2 = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("SELECT `inventory` FROM seperateChests_users WHERE `chestID`=? AND `player`=?");
+                        ps2.setInt(1, rs.getInt("ChestID"));
+                        ps2.setString(2, event.getPlayer().getName());
+                        ResultSet rs2 = ps2.executeQuery();
+                        if (rs2.next()) {
+                            ItemStack[] items = DataStrings.parseInventory(rs2.getString("inventory"), 27);
+                            Inventory playerInventory = this.getServer().createInventory(event.getPlayer(), 27);
+                            playerInventory.setContents(items);
+                            event.getPlayer().openInventory(playerInventory);
+                            this.chestUsers.put(event.getPlayer().getName(), rs.getInt("ChestID"));
+                            this.getLogger().info(event.getPlayer().getName() + " opened previously opened chest #" + rs.getInt("ChestID"));
+                        } else {
+                            PreparedStatement ps3 = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("INSERT INTO seperateChests_users (`chestID`, `inventory`, `player`) VALUES (?,?,?)");
+                            ps3.setInt(1, rs.getInt("ChestID"));
+                            ps3.setString(2, rs.getString("inventory"));
+                            ps3.setString(3, event.getPlayer().getName());
+                            ps3.executeUpdate();
+                            ItemStack[] items = DataStrings.parseInventory(rs.getString("inventory"), 27);
+                            Inventory playerInventory = this.getServer().createInventory(event.getPlayer(), 27);
+                            playerInventory.setContents(items);
+                            event.getPlayer().openInventory(playerInventory);
+                            this.chestUsers.put(event.getPlayer().getName(), rs.getInt("ChestID"));
+                            this.getLogger().info(event.getPlayer().getName() + " opened chest #" + rs.getInt("ChestID") + " for the first time, inserted row for his unique inventory");
+                        }
                         event.setCancelled(true);
-                        return;
-                    }
-                    */
-                    PreparedStatement ps2 = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("SELECT `inventory` FROM seperateChests_users WHERE `chestID`=? AND `player`=?");
-                    ps2.setInt(1, rs.getInt("ChestID"));
-                    ps2.setString(2, event.getPlayer().getName());
-                    ResultSet rs2 = ps2.executeQuery();
-                    if (rs2.next()) {
-                        ItemStack[] items = DataStrings.parseInventory(rs2.getString("inventory"), 27);
-                        Inventory playerInventory = this.getServer().createInventory(event.getPlayer(), 27);
-                        playerInventory.setContents(items);
-                        event.getPlayer().openInventory(playerInventory);
-                        this.chestUsers.put(event.getPlayer().getName(), rs.getInt("ChestID"));
-                        this.getLogger().info(event.getPlayer().getName() + " opened previously opened chest #" + rs.getInt("ChestID"));
                     } else {
-                        PreparedStatement ps3 = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("INSERT INTO seperateChests_users (`chestID`, `inventory`, `player`) VALUES (?,?,?)");
-                        ps3.setInt(1, rs.getInt("ChestID"));
-                        ps3.setString(2, rs.getString("inventory"));
-                        ps3.setString(3, event.getPlayer().getName());
-                        ps3.executeUpdate();
-                        ItemStack[] items = DataStrings.parseInventory(rs.getString("inventory"), 27);
-                        Inventory playerInventory = this.getServer().createInventory(event.getPlayer(), 27);
-                        playerInventory.setContents(items);
-                        event.getPlayer().openInventory(playerInventory);
-                        this.chestUsers.put(event.getPlayer().getName(), rs.getInt("ChestID"));
-                        this.getLogger().info(event.getPlayer().getName() + " opened chest #" + rs.getInt("ChestID") + " for the first time, inserted row for his unique inventory");
+                        ((Player)event.getPlayer()).sendMessage(ChatColor.RED + "Sorry, chest currently out of order D:");
+                        event.setCancelled(true);
                     }
-                    event.setCancelled(true);
                 } catch (Exception e) {
                     event.setCancelled(true);
                     e.printStackTrace();
@@ -239,11 +243,11 @@ public class J2MC_seperatechests extends JavaPlugin implements Listener {
             chestUsers.remove(player);
         }
     }
-    
+
     @EventHandler
     public void onBlockBreak(BlockBreakEvent event) {
-        if(chestLocations.contains(event.getBlock().getLocation())){
-            if(event.getPlayer().hasPermission("j2mc.seperatechest.command")){
+        if (chestLocations.contains(event.getBlock().getLocation())) {
+            if (event.getPlayer().hasPermission("j2mc.seperatechest.command")) {
                 event.getPlayer().sendMessage("Thats a seperate type chest, you have to remove it from the database first (/sepchests delete)");
             }
             event.setCancelled(true);
