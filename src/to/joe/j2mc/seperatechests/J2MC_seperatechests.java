@@ -13,6 +13,7 @@ import org.bukkit.block.Chest;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -91,6 +92,57 @@ public class J2MC_seperatechests extends JavaPlugin implements Listener {
                 event.setCancelled(true);
             }
         }
+        if ((event.getAction() == Action.RIGHT_CLICK_BLOCK) && (event.getClickedBlock().getType() == Material.CHEST) && this.chestLocations.contains(event.getClickedBlock().getLocation())){
+            try {
+                Location loc = event.getClickedBlock().getLocation();
+                PreparedStatement ps = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("SELECT `ChestID`, `inventory` FROM seperateChests_chests WHERE `world`=? AND `x`=? AND `y`=? AND `z`=?");
+                ps.setString(1, loc.getWorld().getName());
+                ps.setDouble(2, loc.getX());
+                ps.setDouble(3, loc.getY());
+                ps.setDouble(4, loc.getZ());
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) {
+                    /*
+                     * if(this.chestUsers.containsValue(rs.getInt("ChestID"))
+                     * ){ ((Player)
+                     * event.getPlayer()).sendMessage(ChatColor.RED +
+                     * "This chest is currently in use! Please wait.");
+                     * event.setCancelled(true); return; }
+                     */
+                    PreparedStatement ps2 = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("SELECT `inventory` FROM seperateChests_users WHERE `chestID`=? AND `player`=?");
+                    ps2.setInt(1, rs.getInt("ChestID"));
+                    ps2.setString(2, event.getPlayer().getName());
+                    ResultSet rs2 = ps2.executeQuery();
+                    if (rs2.next()) {
+                        ItemStack[] items = DataStrings.parseInventory(rs2.getString("inventory"), 27);
+                        Inventory playerInventory = this.getServer().createInventory(event.getPlayer(), 27);
+                        playerInventory.setContents(items);
+                        event.getPlayer().openInventory(playerInventory);
+                        this.chestUsers.put(event.getPlayer().getName(), rs.getInt("ChestID"));
+                        this.getLogger().info(event.getPlayer().getName() + " opened previously opened chest #" + rs.getInt("ChestID"));
+                    } else {
+                        PreparedStatement ps3 = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("INSERT INTO seperateChests_users (`chestID`, `inventory`, `player`) VALUES (?,?,?)");
+                        ps3.setInt(1, rs.getInt("ChestID"));
+                        ps3.setString(2, rs.getString("inventory"));
+                        ps3.setString(3, event.getPlayer().getName());
+                        ps3.executeUpdate();
+                        ItemStack[] items = DataStrings.parseInventory(rs.getString("inventory"), 27);
+                        Inventory playerInventory = this.getServer().createInventory(event.getPlayer(), 27);
+                        playerInventory.setContents(items);
+                        event.getPlayer().openInventory(playerInventory);
+                        this.chestUsers.put(event.getPlayer().getName(), rs.getInt("ChestID"));
+                        this.getLogger().info(event.getPlayer().getName() + " opened chest #" + rs.getInt("ChestID") + " for the first time, inserted row for his unique inventory");
+                    }
+                    event.setCancelled(true);
+                } else {
+                    ((Player)event.getPlayer()).sendMessage(ChatColor.RED + "Sorry, chest currently out of order D:");
+                    event.setCancelled(true);
+                }
+            } catch (Exception e) {
+                event.setCancelled(true);
+                e.printStackTrace();
+            }
+        }
     }
 
     @EventHandler
@@ -106,59 +158,12 @@ public class J2MC_seperatechests extends JavaPlugin implements Listener {
                 return;
             }
         }
-        if (event.getInventory().getHolder() instanceof Chest && !(event.getInventory() instanceof DoubleChestInventory)) {
+        /*if (event.getInventory().getHolder() instanceof Chest && !(event.getInventory() instanceof DoubleChestInventory)) {
             Location loc = ((Chest) event.getInventory().getHolder()).getBlock().getLocation();
             if (chestLocations.contains(loc)) {
-                try {
-                    PreparedStatement ps = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("SELECT `ChestID`, `inventory` FROM seperateChests_chests WHERE `world`=? AND `x`=? AND `y`=? AND `z`=?");
-                    ps.setString(1, loc.getWorld().getName());
-                    ps.setDouble(2, loc.getX());
-                    ps.setDouble(3, loc.getY());
-                    ps.setDouble(4, loc.getZ());
-                    ResultSet rs = ps.executeQuery();
-                    if (rs.next()) {
-                        /*
-                         * if(this.chestUsers.containsValue(rs.getInt("ChestID"))
-                         * ){ ((Player)
-                         * event.getPlayer()).sendMessage(ChatColor.RED +
-                         * "This chest is currently in use! Please wait.");
-                         * event.setCancelled(true); return; }
-                         */
-                        PreparedStatement ps2 = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("SELECT `inventory` FROM seperateChests_users WHERE `chestID`=? AND `player`=?");
-                        ps2.setInt(1, rs.getInt("ChestID"));
-                        ps2.setString(2, event.getPlayer().getName());
-                        ResultSet rs2 = ps2.executeQuery();
-                        if (rs2.next()) {
-                            ItemStack[] items = DataStrings.parseInventory(rs2.getString("inventory"), 27);
-                            Inventory playerInventory = this.getServer().createInventory(event.getPlayer(), 27);
-                            playerInventory.setContents(items);
-                            event.getPlayer().openInventory(playerInventory);
-                            this.chestUsers.put(event.getPlayer().getName(), rs.getInt("ChestID"));
-                            this.getLogger().info(event.getPlayer().getName() + " opened previously opened chest #" + rs.getInt("ChestID"));
-                        } else {
-                            PreparedStatement ps3 = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("INSERT INTO seperateChests_users (`chestID`, `inventory`, `player`) VALUES (?,?,?)");
-                            ps3.setInt(1, rs.getInt("ChestID"));
-                            ps3.setString(2, rs.getString("inventory"));
-                            ps3.setString(3, event.getPlayer().getName());
-                            ps3.executeUpdate();
-                            ItemStack[] items = DataStrings.parseInventory(rs.getString("inventory"), 27);
-                            Inventory playerInventory = this.getServer().createInventory(event.getPlayer(), 27);
-                            playerInventory.setContents(items);
-                            event.getPlayer().openInventory(playerInventory);
-                            this.chestUsers.put(event.getPlayer().getName(), rs.getInt("ChestID"));
-                            this.getLogger().info(event.getPlayer().getName() + " opened chest #" + rs.getInt("ChestID") + " for the first time, inserted row for his unique inventory");
-                        }
-                        event.setCancelled(true);
-                    } else {
-                        ((Player)event.getPlayer()).sendMessage(ChatColor.RED + "Sorry, chest currently out of order D:");
-                        event.setCancelled(true);
-                    }
-                } catch (Exception e) {
-                    event.setCancelled(true);
-                    e.printStackTrace();
-                }
+
             }
-        }
+        }*/
     }
 
     @EventHandler
