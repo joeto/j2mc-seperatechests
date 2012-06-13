@@ -19,6 +19,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.player.PlayerAnimationType;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.DoubleChestInventory;
@@ -59,12 +60,12 @@ public class J2MC_seperatechests extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
-        if (event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.CHEST && pendingSmackers.contains(event.getPlayer().getName())) {
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock().getType() == Material.CHEST && pendingSmackers.contains(event.getPlayer().getName())) {
             event.getPlayer().sendMessage(ChatColor.RED + "Verifying that this chest can be altered!");
             this.pendingSmackers.remove(event.getPlayer().getName());
             this.pendingInventoryChanges.add(event.getPlayer().getName());
         }
-        if (event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.CHEST && pendingDeletion.contains(event.getPlayer().getName())) {
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock().getType() == Material.CHEST && pendingDeletion.contains(event.getPlayer().getName())) {
             try {
                 Location loc = event.getClickedBlock().getLocation();
                 PreparedStatement isItAChest = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("SELECT `ChestID` FROM seperateChests_chests WHERE world=? AND x=? AND y=? AND z=?");
@@ -185,6 +186,17 @@ public class J2MC_seperatechests extends JavaPlugin implements Listener {
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         if (this.chestUsers.containsKey(event.getPlayer().getName())) {
+            if (this.chestUsers.containsKey(event.getPlayer().getName())) {
+                try {
+                    PreparedStatement ps = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("UPDATE seperateChests_users SET `inventory`=? WHERE `chestID`=? AND `player`=?");
+                    ps.setString(1, DataStrings.valueOf(event.getInventory().getContents()));
+                    ps.setInt(2, this.chestUsers.get(event.getPlayer().getName()));
+                    ps.setString(3, event.getPlayer().getName());
+                    ps.executeUpdate();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
             this.getLogger().info(event.getPlayer().getName() + " closed chest #" + this.chestUsers.get(event.getPlayer().getName()));
             this.chestUsers.remove(event.getPlayer().getName());
         }
