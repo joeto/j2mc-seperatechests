@@ -4,7 +4,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -19,7 +20,6 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.inventory.InventoryType;
-import org.bukkit.event.player.PlayerAnimationType;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.DoubleChestInventory;
@@ -32,13 +32,16 @@ import to.joe.j2mc.seperatechests.commands.SeperateChestsCommand;
 
 public class J2MC_seperatechests extends JavaPlugin implements Listener {
 
+    public static J2MC_seperatechests instance;
     public ArrayList<String> pendingSmackers = new ArrayList<String>();
     public ArrayList<String> pendingDeletion = new ArrayList<String>();
     public ArrayList<String> pendingInventoryChanges = new ArrayList<String>();
-    public HashMap<String, Integer> chestUsers = new HashMap<String, Integer>();
+    public Map<String, Integer> chestUsers = new ConcurrentHashMap<String, Integer>();
     public ArrayList<Location> chestLocations = new ArrayList<Location>();
 
     public void onEnable() {
+        instance = this;
+
         this.getCommand("seperatechests").setExecutor(new SeperateChestsCommand(this));
 
         this.getServer().getPluginManager().registerEvents(this, this);
@@ -93,7 +96,7 @@ public class J2MC_seperatechests extends JavaPlugin implements Listener {
                 event.setCancelled(true);
             }
         }
-        if ((event.getAction() == Action.RIGHT_CLICK_BLOCK) && (event.getClickedBlock().getType() == Material.CHEST) && this.chestLocations.contains(event.getClickedBlock().getLocation())){
+        if ((event.getAction() == Action.RIGHT_CLICK_BLOCK) && (event.getClickedBlock().getType() == Material.CHEST) && this.chestLocations.contains(event.getClickedBlock().getLocation())) {
             try {
                 Location loc = event.getClickedBlock().getLocation();
                 PreparedStatement ps = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("SELECT `ChestID`, `inventory` FROM seperateChests_chests WHERE `world`=? AND `x`=? AND `y`=? AND `z`=?");
@@ -104,9 +107,8 @@ public class J2MC_seperatechests extends JavaPlugin implements Listener {
                 ResultSet rs = ps.executeQuery();
                 if (rs.next()) {
                     /*
-                     * if(this.chestUsers.containsValue(rs.getInt("ChestID"))
-                     * ){ ((Player)
-                     * event.getPlayer()).sendMessage(ChatColor.RED +
+                     * if(this.chestUsers.containsValue(rs.getInt("ChestID")) ){
+                     * ((Player) event.getPlayer()).sendMessage(ChatColor.RED +
                      * "This chest is currently in use! Please wait.");
                      * event.setCancelled(true); return; }
                      */
@@ -136,7 +138,7 @@ public class J2MC_seperatechests extends JavaPlugin implements Listener {
                     }
                     event.setCancelled(true);
                 } else {
-                    ((Player)event.getPlayer()).sendMessage(ChatColor.RED + "Sorry, chest currently out of order D:");
+                    ((Player) event.getPlayer()).sendMessage(ChatColor.RED + "Sorry, chest currently out of order D:");
                     event.setCancelled(true);
                 }
             } catch (Exception e) {
@@ -159,44 +161,68 @@ public class J2MC_seperatechests extends JavaPlugin implements Listener {
                 return;
             }
         }
-        /*if (event.getInventory().getHolder() instanceof Chest && !(event.getInventory() instanceof DoubleChestInventory)) {
-            Location loc = ((Chest) event.getInventory().getHolder()).getBlock().getLocation();
-            if (chestLocations.contains(loc)) {
-
-            }
-        }*/
+        /*
+         * if (event.getInventory().getHolder() instanceof Chest &&
+         * !(event.getInventory() instanceof DoubleChestInventory)) { Location
+         * loc = ((Chest)
+         * event.getInventory().getHolder()).getBlock().getLocation(); if
+         * (chestLocations.contains(loc)) {
+         * 
+         * } }
+         */
     }
 
     @EventHandler
-    public void onInventoryClick(InventoryClickEvent event) {
+    public void onInventoryClick(final InventoryClickEvent event) {
         if (this.chestUsers.containsKey(event.getWhoClicked().getName())) {
-            try {
-                PreparedStatement ps = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("UPDATE seperateChests_users SET `inventory`=? WHERE `chestID`=? AND `player`=?");
-                ps.setString(1, DataStrings.valueOf(event.getInventory().getContents()));
-                ps.setInt(2, this.chestUsers.get(event.getWhoClicked().getName()));
-                ps.setString(3, event.getWhoClicked().getName());
-                ps.executeUpdate();
-            } catch (Exception e) {
-                event.setCancelled(true);
-                e.printStackTrace();
-            }
+            // Schedule a task to grab the inventory data and turn it into a
+            // string
+            this.getServer().getScheduler().scheduleSyncDelayedTask(this, new Runnable() {
+                @Override
+                public void run() {
+                    final String inventory = DataStrings.valueOf(event.getInventory().getContents());
+                    final String player = event.getWhoClicked().getName();
+                    // Schedule a threaded task to update the sql table with the
+                    // new inventory data
+                    getServer().getScheduler().scheduleAsyncDelayedTask(J2MC_seperatechests.instance, new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                PreparedStatement ps = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("UPDATE seperateChests_users SET `inventory`=? WHERE `chestID`=? AND `player`=?");
+                                ps.setString(1, inventory);
+                                ps.setInt(2, chestUsers.get(player));
+                                ps.setString(3, player);
+                                ps.executeUpdate();
+                            } catch (Exception e) {
+                                event.setCancelled(true);
+                                e.printStackTrace();
+                            }
+                        }
+                    });
+                }
+            }, 1);
         }
     }
 
     @EventHandler
-    public void onInventoryClose(InventoryCloseEvent event) {
+    public void onInventoryClose(final InventoryCloseEvent event) {
         if (this.chestUsers.containsKey(event.getPlayer().getName())) {
-            if (this.chestUsers.containsKey(event.getPlayer().getName())) {
-                try {
-                    PreparedStatement ps = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("UPDATE seperateChests_users SET `inventory`=? WHERE `chestID`=? AND `player`=?");
-                    ps.setString(1, DataStrings.valueOf(event.getInventory().getContents()));
-                    ps.setInt(2, this.chestUsers.get(event.getPlayer().getName()));
-                    ps.setString(3, event.getPlayer().getName());
-                    ps.executeUpdate();
-                } catch (Exception e) {
-                    e.printStackTrace();
+            final String inventory = DataStrings.valueOf(event.getInventory().getContents());
+            final String player = event.getPlayer().getName();
+            getServer().getScheduler().scheduleAsyncDelayedTask(J2MC_seperatechests.instance, new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        PreparedStatement ps = J2MC_Manager.getMySQL().getFreshPreparedStatementHotFromTheOven("UPDATE seperateChests_users SET `inventory`=? WHERE `chestID`=? AND `player`=?");
+                        ps.setString(1, inventory);
+                        ps.setInt(2, chestUsers.get(player));
+                        ps.setString(3, player);
+                        ps.executeUpdate();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
-            }
+            });
             this.getLogger().info(event.getPlayer().getName() + " closed chest #" + this.chestUsers.get(event.getPlayer().getName()));
             this.chestUsers.remove(event.getPlayer().getName());
         }
